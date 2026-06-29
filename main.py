@@ -3,8 +3,9 @@ import logging
 import threading
 from html import escape
 from http.server import HTTPServer, BaseHTTPRequestHandler
+from urllib.parse import urlparse
 
-import psycopg2
+import pg8000.dbapi as pg
 from telegram import Update
 from telegram.ext import Application, MessageHandler, filters, ContextTypes
 
@@ -24,7 +25,15 @@ PORT             = int(os.environ.get("PORT", 8080))
 # ─── Database ────────────────────────────────────────────────────────────────
 
 def get_conn():
-    return psycopg2.connect(DATABASE_URL)
+    url = urlparse(DATABASE_URL)
+    return pg.connect(
+        host=url.hostname,
+        database=url.path[1:],
+        user=url.username,
+        password=url.password,
+        port=url.port or 5432,
+        ssl_context=True
+    )
 
 def init_db():
     conn = get_conn()
@@ -63,7 +72,7 @@ def get_archive_id(orig_id: int):
     return row[0] if row else None
 
 
-# ─── Health Server (برای UptimeRobot) ────────────────────────────────────────
+# ─── Health Server ────────────────────────────────────────────────────────────
 
 class HealthHandler(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -85,14 +94,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     orig_id = msg.message_id
 
-    # نام فرستنده
     name = "ناشناس"
     if msg.from_user:
         name = msg.from_user.full_name
     elif msg.sender_chat:
         name = msg.sender_chat.title
 
-    # پیدا کردن ریپلای در آرشیو
     reply_to = None
     if msg.reply_to_message:
         reply_to = get_archive_id(msg.reply_to_message.message_id)
@@ -101,7 +108,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         rp = reply_to if with_reply else None
 
         if msg.text:
-            # پیام متنی
             return await context.bot.send_message(
                 chat_id=ARCHIVE_GROUP_ID,
                 text=f"<b>👤 {escape(name)}:</b>\n{escape(msg.text)}",
@@ -110,7 +116,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 disable_web_page_preview=True
             )
         else:
-            # عکس، ویس، فیلم، فایل، استیکر و ...
             extra = {}
             if not msg.sticker and not msg.dice:
                 cap = escape(msg.caption or "")
@@ -128,7 +133,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         sent = await do_archive(with_reply=True)
     except Exception as e1:
-        logger.warning(f"⚠️ retry without reply_to for {orig_id}: {e1}")
+        logger.warning(f"⚠️ retry without reply for {orig_id}: {e1}")
         try:
             sent = await do_archive(with_reply=False)
         except Exception as e2:
@@ -143,7 +148,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 if __name__ == "__main__":
     init_db()
-
     threading.Thread(target=run_health_server, daemon=True).start()
     logger.info(f"🌐 Health check on :{PORT}")
 
