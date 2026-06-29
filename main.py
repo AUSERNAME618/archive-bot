@@ -1,6 +1,7 @@
 import os
 import logging
 import threading
+import time
 from html import escape
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse
@@ -79,6 +80,9 @@ class HealthHandler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.end_headers()
         self.wfile.write(b"Archive Bot OK")
+    def do_HEAD(self):
+        self.send_response(200)
+        self.end_headers()
     def log_message(self, *_): pass
 
 def run_health_server():
@@ -106,7 +110,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     async def do_archive(with_reply: bool):
         rp = reply_to if with_reply else None
-
         if msg.text:
             return await context.bot.send_message(
                 chat_id=ARCHIVE_GROUP_ID,
@@ -121,7 +124,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 cap = escape(msg.caption or "")
                 extra["caption"]    = f"<b>👤 {escape(name)}</b>\n{cap}".strip()
                 extra["parse_mode"] = "HTML"
-
             return await context.bot.copy_message(
                 chat_id=ARCHIVE_GROUP_ID,
                 from_chat_id=SOURCE_GROUP_ID,
@@ -144,15 +146,29 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"✅ {orig_id} → {sent.message_id} | {name}")
 
 
+# ─── Bot Loop با auto-restart ─────────────────────────────────────────────────
+
+def run_bot():
+    while True:
+        try:
+            app = Application.builder().token(BOT_TOKEN).build()
+            app.add_handler(MessageHandler(filters.ALL, handle_message))
+            logger.info("🤖 Bot polling started")
+            app.run_polling(drop_pending_updates=True, allowed_updates=Update.ALL_TYPES)
+        except Exception as e:
+            logger.error(f"❌ Bot crashed: {e}")
+            logger.info("🔄 Restarting in 10s...")
+            time.sleep(10)
+
+
 # ─── Main ─────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
     init_db()
-    threading.Thread(target=run_health_server, daemon=True).start()
-    logger.info(f"🌐 Health check on :{PORT}")
 
-    app = Application.builder().token(BOT_TOKEN).build()
-    app.add_handler(MessageHandler(filters.ALL, handle_message))
+    # ربات توی thread جداگانه با auto-restart اجرا میشه
+    threading.Thread(target=run_bot, daemon=True).start()
 
-    logger.info("🤖 Polling started...")
-    app.run_polling(drop_pending_updates=True, allowed_updates=Update.ALL_TYPES)
+    # Health server توی main thread — هیچوقت نمیره
+    logger.info(f"🌐 Health server on :{PORT}")
+    run_health_server()
