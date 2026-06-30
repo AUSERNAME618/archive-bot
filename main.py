@@ -146,9 +146,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"✅ {orig_id} → {sent.message_id} | {name}")
 
 
-# ─── Bot Loop با auto-restart ─────────────────────────────────────────────────
+# ─── Main ─────────────────────────────────────────────────────────────────────
 
-def run_bot():
+if __name__ == "__main__":
+    init_db()
+
+    # Health server توی thread جداگانه — برای UptimeRobot
+    threading.Thread(target=run_health_server, daemon=True).start()
+    logger.info(f"🌐 Health server on :{PORT}")
+
+    # ربات باید توی main thread اجرا بشه چون با signal handler کار داره
     while True:
         try:
             app = Application.builder().token(BOT_TOKEN).build()
@@ -159,16 +166,3 @@ def run_bot():
             logger.error(f"❌ Bot crashed: {e}")
             logger.info("🔄 Restarting in 10s...")
             time.sleep(10)
-
-
-# ─── Main ─────────────────────────────────────────────────────────────────────
-
-if __name__ == "__main__":
-    init_db()
-
-    # ربات توی thread جداگانه با auto-restart اجرا میشه
-    threading.Thread(target=run_bot, daemon=True).start()
-
-    # Health server توی main thread — هیچوقت نمیره
-    logger.info(f"🌐 Health server on :{PORT}")
-    run_health_server()
