@@ -124,18 +124,30 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 parse_mode="HTML",
                 disable_web_page_preview=True
             )
+        elif msg.sticker or msg.dice:
+            # استیکر و تاس کپشن قبول نمی‌کنن — یه پیام برچسب قبلش می‌فرستیم
+            kind = "استیکر" if msg.sticker else "تاس"
+            label = await context.bot.send_message(
+                chat_id=ARCHIVE_GROUP_ID,
+                text=f"<b>👤 {escape(name)}</b> یک {kind} فرستاد 👇",
+                reply_to_message_id=rp,
+                parse_mode="HTML"
+            )
+            return await context.bot.copy_message(
+                chat_id=ARCHIVE_GROUP_ID,
+                from_chat_id=SOURCE_GROUP_ID,
+                message_id=orig_id,
+                reply_to_message_id=label.message_id
+            )
         else:
-            extra = {}
-            if not msg.sticker and not msg.dice:
-                cap = escape(msg.caption or "")
-                extra["caption"]    = f"<b>👤 {escape(name)}</b>\n{cap}".strip()
-                extra["parse_mode"] = "HTML"
+            cap = escape(msg.caption or "")
             return await context.bot.copy_message(
                 chat_id=ARCHIVE_GROUP_ID,
                 from_chat_id=SOURCE_GROUP_ID,
                 message_id=orig_id,
                 reply_to_message_id=rp,
-                **extra
+                caption=f"<b>👤 {escape(name)}</b>\n{cap}".strip(),
+                parse_mode="HTML"
             )
 
     try:
