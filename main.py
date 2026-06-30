@@ -93,7 +93,13 @@ def run_health_server():
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.effective_message
-    if not msg or msg.chat_id != SOURCE_GROUP_ID:
+    if not msg:
+        return
+
+    # 🔍 لاگ دیباگ — هر پیامی که میاد رو نشون میده
+    logger.info(f"📥 پیام رسید از chat_id={msg.chat_id} | SOURCE_GROUP_ID تنظیم‌شده={SOURCE_GROUP_ID}")
+
+    if msg.chat_id != SOURCE_GROUP_ID:
         return
 
     orig_id = msg.message_id
